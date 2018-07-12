@@ -331,7 +331,7 @@ public class ConsumersResource {
     return ctx.getKafkaConsumerManager().assignment(group, instance);
   }
 
-  private <KafkaKeyT, KafkaValueT, ClientKeyT, ClientValueT> void readRecords(
+  private <KafkaKeyT, KafkaValueT, ClientKeyT, ClientValueT> void  readRecords(
       final @Suspended AsyncResponse asyncResponse,
       final @PathParam("group") String group,
       final @PathParam("instance") String instance,

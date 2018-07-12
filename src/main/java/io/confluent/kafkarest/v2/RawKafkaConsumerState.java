@@ -22,14 +22,15 @@ import io.confluent.kafkarest.KafkaRestConfig;
 import io.confluent.kafkarest.entities.RawConsumerRecord;
 import kafka.serializer.Decoder;
 import kafka.serializer.DefaultDecoder;
+import kafka.serializer.StringDecoder;
 import kafka.utils.VerifiableProperties;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.errors.SerializationException;
 
-public class RawKafkaConsumerState extends KafkaConsumerState<byte[], byte[], String, String> {
+public class RawKafkaConsumerState extends KafkaConsumerState<String, String, String, String> {
 
-  private static final Decoder<byte[]> decoder = new DefaultDecoder(new VerifiableProperties());
+  private static final Decoder<String> decoder = new StringDecoder(new VerifiableProperties());
 
   public RawKafkaConsumerState(KafkaRestConfig config,
                                ConsumerInstanceId instanceId,
@@ -38,18 +39,18 @@ public class RawKafkaConsumerState extends KafkaConsumerState<byte[], byte[], St
   }
 
   @Override
-  protected Decoder<byte[]> getKeyDecoder() {
+  protected Decoder<String> getKeyDecoder() {
     return decoder;
   }
 
   @Override
-  protected Decoder<byte[]> getValueDecoder() {
+  protected Decoder<String> getValueDecoder() {
     return decoder;
   }
 
   @Override
   public ConsumerRecordAndSize<String, String> createConsumerRecord(
-      ConsumerRecord<byte[], byte[]> record) {
+      ConsumerRecord<String, String> record) {
     long approxSize = 0;
 
     String key = null;
@@ -60,13 +61,13 @@ public class RawKafkaConsumerState extends KafkaConsumerState<byte[], byte[], St
     // if their data is not actually JSON encoded.
 
     if (record.key() != null) {
-      approxSize += record.key().length;
-      key = deserialize(record.key());
+      approxSize += record.key().length();
+      key = record.key();
     }
 
     if (record.value() != null) {
-      approxSize += record.value().length;
-      value = deserialize(record.value());
+      approxSize += record.value().length();
+      value = record.value();
     }
 
     return new ConsumerRecordAndSize<>(
