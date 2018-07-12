@@ -53,7 +53,6 @@ import io.confluent.kafkarest.entities.TopicPartitionOffset;
 import io.confluent.kafkarest.v2.*;
 import io.confluent.rest.annotations.PerformanceMetric;
 
-import static io.confluent.kafkarest.Versions.KAFKA_V2_JSON_RAW_WEIGHTED;
 
 @SuppressWarnings("RSReferenceInspection")
 @Path("/consumers")

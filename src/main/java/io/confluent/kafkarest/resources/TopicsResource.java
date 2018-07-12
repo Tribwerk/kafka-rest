@@ -41,7 +41,6 @@ import io.confluent.kafkarest.ProducerPool;
 import io.confluent.kafkarest.RecordMetadataOrException;
 import io.confluent.kafkarest.Versions;
 import io.confluent.rest.annotations.PerformanceMetric;
-import sun.misc.Version;
 
 @Path("/topics")
 @Produces({Versions.KAFKA_V1_JSON_WEIGHTED, Versions.KAFKA_DEFAULT_JSON_WEIGHTED,
@@ -111,7 +110,7 @@ public class TopicsResource {
           @PathParam("topic") String topicName,
           @Valid @NotNull TopicProduceRequest<RawTopicProduceRecord> request
   ) {
-    log.info("Producing message to "+topicName);
+    log.info("Producing message to " + topicName);
     produce(asyncResponse, topicName, EmbeddedFormat.RAW, request);
   }
 

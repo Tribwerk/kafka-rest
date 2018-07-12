@@ -52,6 +52,7 @@ public class RawTopicProduceRecord extends RawProduceRecord
   public RawTopicProduceRecord(String value, Integer partition) {
     this(null, value, partition);
   }
+
   public RawTopicProduceRecord(String value) {
     this(null, value, null);
   }
@@ -59,6 +60,7 @@ public class RawTopicProduceRecord extends RawProduceRecord
   public RawTopicProduceRecord(String key, String value) {
     this(key, value, null);
   }
+
   public RawTopicProduceRecord(Object value, Integer partition) {
     this(null, value != null ? value.toString() : null, partition);
   }

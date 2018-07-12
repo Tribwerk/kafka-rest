@@ -21,7 +21,6 @@ import io.confluent.kafkarest.ConsumerRecordAndSize;
 import io.confluent.kafkarest.KafkaRestConfig;
 import io.confluent.kafkarest.entities.RawConsumerRecord;
 import kafka.serializer.Decoder;
-import kafka.serializer.DefaultDecoder;
 import kafka.serializer.StringDecoder;
 import kafka.utils.VerifiableProperties;
 import org.apache.kafka.clients.consumer.Consumer;

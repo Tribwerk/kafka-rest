@@ -15,7 +15,11 @@
  **/
 package io.confluent.kafkarest.v2;
 
+import io.confluent.kafkarest.KafkaRestConfig;
+import io.confluent.kafkarest.MetadataObserver;
 import io.confluent.kafkarest.entities.*;
+import io.confluent.kafkarest.mock.MockTime;
+import io.confluent.rest.RestConfigException;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
@@ -27,6 +31,7 @@ import org.easymock.Mock;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -34,23 +39,14 @@ import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 
-import io.confluent.kafkarest.KafkaRestConfig;
-import io.confluent.kafkarest.MetadataObserver;
-import io.confluent.kafkarest.mock.MockTime;
-import io.confluent.rest.RestConfigException;
-import org.junit.runner.RunWith;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 /**
  * Tests basic create/read/commit/delete functionality of ConsumerManager. This only exercises the
  * functionality for binary data because it uses a mock consumer that only works with byte[] data.
  */
 @RunWith(EasyMockRunner.class)
-public class KafkaConsumerManagerTest {
+public class KafkaRawConsumerManagerTest {
 
     private KafkaRestConfig config;
     @Mock
@@ -69,7 +65,8 @@ public class KafkaConsumerManagerTest {
     private static List<TopicPartitionOffset> actualOffsets = null;
 
     private Capture<Properties> capturedConsumerConfig;
-    private MockConsumer<byte[], byte[]> consumer;
+    private MockConsumer<String, String> consumer;
+
     @Before
     public void setUp() throws RestConfigException {
         Properties props = new Properties();
@@ -95,46 +92,32 @@ public class KafkaConsumerManagerTest {
 
     }
 
-    @Test
-    public void testConsumerOverrides() {
-        final Capture<Properties> consumerConfig = Capture.newInstance();
-        EasyMock.expect(consumerFactory.createConsumer(EasyMock.capture(consumerConfig)))
-                .andReturn(consumer);
 
-        EasyMock.replay(consumerFactory);
-
-        consumerManager.createConsumer(groupName, new ConsumerInstanceConfig(EmbeddedFormat.BINARY));
-        // The exclude.internal.topics setting is overridden via the constructor when the
-        // ConsumerManager is created, and we can make sure it gets set properly here.
-        assertEquals("false", consumerConfig.getValue().get(ConsumerConfig.EXCLUDE_INTERNAL_TOPICS_CONFIG));
-
-        EasyMock.verify(consumerFactory);
-    }
 
     @Test
-    public void testConsumerNormalOps() throws InterruptedException, ExecutionException {
+    public void testConsumerOps() throws InterruptedException, ExecutionException {
         // Tests create instance, read, and delete
-        final List<ConsumerRecord<byte[], byte[]>> referenceRecords
-                = Arrays.<ConsumerRecord<byte[], byte[]>>asList(
-                new BinaryConsumerRecord(topicName, "k1".getBytes(), "v1".getBytes(), 0, 0),
-                new BinaryConsumerRecord(topicName, "k2".getBytes(), "v2".getBytes(), 0, 1),
-                new BinaryConsumerRecord(topicName, "k3".getBytes(), "v3".getBytes(), 0, 2)
+        final List<ConsumerRecord<String, String>> referenceRecords
+                = Arrays.<ConsumerRecord<String, String>>asList(
+                new RawConsumerRecord(topicName, "k1", "v1", 0, 0),
+                new RawConsumerRecord(topicName, "k2", "v2", 0, 1),
+                new RawConsumerRecord(topicName, "k3", "v3", 0, 2)
         );
 
         expectCreate();
         consumer.schedulePollTask(new Runnable() {
             @Override
             public void run() {
-                consumer.addRecord(new org.apache.kafka.clients.consumer.ConsumerRecord<>(topicName, 0, 0, "k1".getBytes(), "v1".getBytes()));
-                consumer.addRecord(new org.apache.kafka.clients.consumer.ConsumerRecord<>(topicName, 0, 1, "k2".getBytes(), "v2".getBytes()));
-                consumer.addRecord(new org.apache.kafka.clients.consumer.ConsumerRecord<>(topicName, 0, 2, "k3".getBytes(), "v3".getBytes()));
+                consumer.addRecord(new org.apache.kafka.clients.consumer.ConsumerRecord<>(topicName, 0, 0, "k1", "v1"));
+                consumer.addRecord(new org.apache.kafka.clients.consumer.ConsumerRecord<>(topicName, 0, 1, "k2", "v2"));
+                consumer.addRecord(new org.apache.kafka.clients.consumer.ConsumerRecord<>(topicName, 0, 2, "k3", "v3"));
             }
         });
 
         EasyMock.replay(mdObserver, consumerFactory);
 
         String cid = consumerManager.createConsumer(
-                groupName, new ConsumerInstanceConfig(EmbeddedFormat.BINARY));
+                groupName, new ConsumerInstanceConfig(EmbeddedFormat.RAW));
         consumerManager.subscribe(groupName, cid, new ConsumerSubscriptionRecord(Collections.singletonList(topicName), null));
         consumer.rebalance(Collections.singletonList(new TopicPartition(topicName, 0)));
         consumer.updateBeginningOffsets(Collections.singletonMap(new TopicPartition(topicName, 0), 0L));
@@ -142,7 +125,7 @@ public class KafkaConsumerManagerTest {
         sawCallback = false;
         actualException = null;
         actualRecords = null;
-        consumerManager.readRecords(groupName, cid, BinaryKafkaConsumerState.class, -1, Long.MAX_VALUE,
+        consumerManager.readRecords(groupName, cid, RawKafkaConsumerState.class, -1, Long.MAX_VALUE,
                 new KafkaConsumerManager.ReadCallback<byte[], byte[]>() {
                     @Override
                     public void onCompletion(List<? extends ConsumerRecord<byte[], byte[]>> records, Exception e) {
@@ -185,6 +168,4 @@ public class KafkaConsumerManagerTest {
 
         EasyMock.verify(mdObserver, consumerFactory);
     }
-
-
 }
