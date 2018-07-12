@@ -15,9 +15,7 @@
  **/
 package io.confluent.kafkarest.v2;
 
-import io.confluent.kafkarest.entities.ConsumerOffsetCommitRequest;
-import io.confluent.kafkarest.entities.ConsumerRecord;
-import io.confluent.kafkarest.entities.ConsumerSubscriptionRecord;
+import io.confluent.kafkarest.entities.*;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
@@ -38,10 +36,6 @@ import java.util.concurrent.ExecutionException;
 
 import io.confluent.kafkarest.KafkaRestConfig;
 import io.confluent.kafkarest.MetadataObserver;
-import io.confluent.kafkarest.entities.BinaryConsumerRecord;
-import io.confluent.kafkarest.entities.ConsumerInstanceConfig;
-import io.confluent.kafkarest.entities.EmbeddedFormat;
-import io.confluent.kafkarest.entities.TopicPartitionOffset;
 import io.confluent.kafkarest.mock.MockTime;
 import io.confluent.rest.RestConfigException;
 import org.junit.runner.RunWith;
@@ -150,6 +144,81 @@ public class KafkaConsumerManagerTest {
         actualException = null;
         actualRecords = null;
         consumerManager.readRecords(groupName, cid, BinaryKafkaConsumerState.class, -1, Long.MAX_VALUE,
+                new KafkaConsumerManager.ReadCallback<byte[], byte[]>() {
+                    @Override
+                    public void onCompletion(List<? extends ConsumerRecord<byte[], byte[]>> records, Exception e) {
+                        actualException = e;
+                        actualRecords = records;
+                        sawCallback = true;
+                    }
+                }).get();
+        assertTrue("Callback failed to fire", sawCallback);
+        assertNull("No exception in callback", actualException);
+        assertEquals("Records returned not as expected", referenceRecords, actualRecords);
+        // With # of bytes in messages < max bytes per response and with a backoff that divides the timeout evenly,
+        // this should finish just at the per-request timeout (because the timeout perfectly coincides with a scheduled
+        // iteration when using the default settings).
+        assertEquals(config.getInt(KafkaRestConfig.CONSUMER_REQUEST_TIMEOUT_MS_CONFIG),
+                config.getTime().milliseconds());
+
+        sawCallback = false;
+        actualException = null;
+        actualOffsets = null;
+        ConsumerOffsetCommitRequest commitRequest = null; // Commit all offsets
+        consumerManager.commitOffsets(groupName, cid, null, commitRequest, new KafkaConsumerManager.CommitCallback() {
+            @Override
+            public void onCompletion(List<TopicPartitionOffset> offsets, Exception e) {
+                sawCallback = true;
+
+                actualException = e;
+                actualOffsets = offsets;
+            }
+        }).get();
+        assertTrue("Callback not called", sawCallback);
+        assertNull("Callback exception", actualException);
+        // Mock consumer doesn't handle offsets, so we just check we get some output for the
+        // right partitions
+        assertNotNull("Callback Offsets", actualOffsets);
+        // TODO: Currently the values are not actually returned in the callback nor in the response.
+        //assertEquals("Callback Offsets Size", 3, actualOffsets.size());
+
+        consumerManager.deleteConsumer(groupName, cid);
+
+        EasyMock.verify(mdObserver, consumerFactory);
+    }
+
+    @Test
+    public void testConsumerRawOps() throws InterruptedException, ExecutionException {
+        // Tests create instance, read, and delete
+        final List<ConsumerRecord<String, String>> referenceRecords
+                = Arrays.<ConsumerRecord<String, String>>asList(
+                new RawConsumerRecord(topicName, "k1", "v1", 0, 0),
+                new RawConsumerRecord(topicName, "k2", "v2", 0, 1),
+                new RawConsumerRecord(topicName, "k3", "v3", 0, 2)
+        );
+
+        expectCreate();
+        consumer.schedulePollTask(new Runnable() {
+            @Override
+            public void run() {
+                consumer.addRecord(new org.apache.kafka.clients.consumer.ConsumerRecord<>(topicName, 0, 0, "k1".getBytes(), "v1".getBytes()));
+                consumer.addRecord(new org.apache.kafka.clients.consumer.ConsumerRecord<>(topicName, 0, 1, "k2".getBytes(), "v2".getBytes()));
+                consumer.addRecord(new org.apache.kafka.clients.consumer.ConsumerRecord<>(topicName, 0, 2, "k3".getBytes(), "v3".getBytes()));
+            }
+        });
+
+        EasyMock.replay(mdObserver, consumerFactory);
+
+        String cid = consumerManager.createConsumer(
+                groupName, new ConsumerInstanceConfig(EmbeddedFormat.RAW));
+        consumerManager.subscribe(groupName, cid, new ConsumerSubscriptionRecord(Collections.singletonList(topicName), null));
+        consumer.rebalance(Collections.singletonList(new TopicPartition(topicName, 0)));
+        consumer.updateBeginningOffsets(Collections.singletonMap(new TopicPartition(topicName, 0), 0L));
+
+        sawCallback = false;
+        actualException = null;
+        actualRecords = null;
+        consumerManager.readRecords(groupName, cid, RawKafkaConsumerState.class, -1, Long.MAX_VALUE,
                 new KafkaConsumerManager.ReadCallback<byte[], byte[]>() {
                     @Override
                     public void onCompletion(List<? extends ConsumerRecord<byte[], byte[]>> records, Exception e) {

@@ -186,6 +186,10 @@ public class KafkaConsumerManager {
           props.put("key.deserializer", "io.confluent.kafka.serializers.KafkaAvroDeserializer");
           props.put("value.deserializer", "io.confluent.kafka.serializers.KafkaAvroDeserializer");
           break;
+        case RAW:
+          props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+          props.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+          break;
         case JSON:
         case BINARY:
         default:
@@ -217,6 +221,9 @@ public class KafkaConsumerManager {
           break;
         case AVRO:
           state = new AvroKafkaConsumerState(this.config, cid, consumer);
+          break;
+        case RAW:
+          state = new RawKafkaConsumerState(this.config, cid, consumer);
           break;
         case JSON:
           state = new JsonKafkaConsumerState(this.config, cid, consumer);
@@ -363,7 +370,7 @@ public class KafkaConsumerManager {
   }
 
   public void subscribe(String group, String instance, ConsumerSubscriptionRecord subscription) {
-    log.debug("Subscribing consumer " + instance + " in group " + group);
+    log.debug("Subscribing consumer " + instance + " in group " + group + " to "+subscription.topics);
     KafkaConsumerState state = getConsumerInstance(group, instance);
     if (state != null) {
       state.subscribe(subscription);

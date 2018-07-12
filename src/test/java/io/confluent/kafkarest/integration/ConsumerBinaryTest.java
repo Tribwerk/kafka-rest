@@ -44,6 +44,7 @@ import static io.confluent.kafkarest.TestUtils.assertErrorResponse;
 public class ConsumerBinaryTest extends AbstractConsumerTest {
 
   private static final String topicName = "topic1";
+  private static final String instanceName = "testConsumer";
   private static final List<Partition> partitions = Arrays.asList(
       new Partition(0, 0, Arrays.asList(
           new PartitionReplica(0, true, true),
@@ -79,6 +80,18 @@ public class ConsumerBinaryTest extends AbstractConsumerTest {
     final int replicationFactor = 1;
     TestUtils.createTopic(zkUtils, topicName, numPartitions, replicationFactor,
                           JavaConversions.asScalaBuffer(this.servers), new Properties());
+  }
+
+  @Test
+  public void testConsumeV2() {
+    produceBinaryMessages(recordsWithKeys);
+    startConsumeMessagesV2(groupName, topicName, EmbeddedFormat.BINARY,
+            Versions.KAFKA_V2_JSON, instanceName);
+//    consumeJsonMessages(topicName, 4);
+//
+//    consumeMessagesV2(groupName, instanceName, topicName, recordsWithKeys,
+//            Versions.KAFKA_V2_JSON_BINARY, Versions.KAFKA_V2_JSON_BINARY,
+//            binaryConsumerRecordType,null);
   }
 
   @Test

@@ -31,6 +31,7 @@ public class ConsumerRawTest extends AbstractConsumerTest {
 
   private static final String topicName = "topic1";
   private static final String groupName = "testconsumergroup";
+  private static final String instanceName = "consumer";
 
   private Map<String, Object> exampleMapValue() {
     Map<String, Object> res = new HashMap<String, Object>();
@@ -81,6 +82,23 @@ public class ConsumerRawTest extends AbstractConsumerTest {
     TestUtils.createTopic(zkUtils, topicName, numPartitions, replicationFactor,
         JavaConversions.asScalaBuffer(this.servers), new Properties());
   }
+
+  @Test
+  public void testConsumeV2() {
+    produceRawMessages(recordsWithKeys);
+    startConsumeMessagesV2(groupName, topicName, EmbeddedFormat.RAW,
+            Versions.KAFKA_V2_JSON_WEIGHTED, instanceName);
+
+//    consumeMessagesV2(groupName, instanceName, topicName, recordsWithKeys,
+//            Versions.KAFKA_V2_JSON_RAW_WEIGHTED, Versions.KAFKA_V2_JSON_RAW_WEIGHTED,
+//            rawConsumerRecordType, new Converter() {
+//              @Override
+//              public String convert(Object obj) {
+//                return obj!=null?obj.toString():null;
+//              }
+//            });
+  }
+
 
   @Test
   public void testConsumeWithKeys() {

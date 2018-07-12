@@ -41,12 +41,14 @@ import io.confluent.kafkarest.ProducerPool;
 import io.confluent.kafkarest.RecordMetadataOrException;
 import io.confluent.kafkarest.Versions;
 import io.confluent.rest.annotations.PerformanceMetric;
+import sun.misc.Version;
 
 @Path("/topics")
 @Produces({Versions.KAFKA_V1_JSON_WEIGHTED, Versions.KAFKA_DEFAULT_JSON_WEIGHTED,
            Versions.JSON_WEIGHTED, Versions.KAFKA_V2_JSON_WEIGHTED})
 @Consumes({Versions.KAFKA_V1_JSON, Versions.KAFKA_DEFAULT_JSON, Versions.JSON,
-           Versions.GENERIC_REQUEST, Versions.KAFKA_V2_JSON})
+           Versions.GENERIC_REQUEST, Versions.KAFKA_V2_JSON, Versions.KAFKA_V2_JSON_RAW,
+        Versions.KAFKA_V1_JSON_RAW})
 public class TopicsResource {
 
   private static final Logger log = LoggerFactory.getLogger(TopicsResource.class);
@@ -109,6 +111,7 @@ public class TopicsResource {
           @PathParam("topic") String topicName,
           @Valid @NotNull TopicProduceRequest<RawTopicProduceRecord> request
   ) {
+    log.info("Producing message to "+topicName);
     produce(asyncResponse, topicName, EmbeddedFormat.RAW, request);
   }
 
@@ -146,8 +149,7 @@ public class TopicsResource {
       final TopicProduceRequest<R> request
   ) {
     log.trace("Executing topic produce request id={} topic={} format={} request={}",
-              asyncResponse, topicName, format, request
-    );
+              asyncResponse, topicName, format, request);
     ctx.getProducerPool().produce(
         topicName, null, format,
         request,

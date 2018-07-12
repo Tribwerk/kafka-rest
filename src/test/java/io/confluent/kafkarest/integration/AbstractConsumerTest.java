@@ -15,31 +15,38 @@
  **/
 package io.confluent.kafkarest.integration;
 
+import avro.shaded.com.google.common.collect.ImmutableCollection;
 import io.confluent.kafka.serializers.KafkaAvroSerializer;
+import io.confluent.kafka.serializers.KafkaJsonDeserializer;
 import io.confluent.kafka.serializers.KafkaJsonSerializer;
 import io.confluent.kafkarest.Errors;
 import io.confluent.kafkarest.KafkaRestConfig;
 import io.confluent.kafkarest.TestUtils;
 import io.confluent.kafkarest.Versions;
 import io.confluent.kafkarest.entities.*;
+import junit.runner.Version;
+import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.apache.tools.ant.taskdefs.Basename;
 
 import javax.ws.rs.client.Entity;
 import javax.ws.rs.core.GenericType;
 import javax.ws.rs.core.Response;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 
 import static io.confluent.kafkarest.TestUtils.assertErrorResponse;
+import static io.confluent.kafkarest.TestUtils.assertNoContentResponse;
 import static io.confluent.kafkarest.TestUtils.assertOKResponse;
 import static org.junit.Assert.*;
 
@@ -84,6 +91,21 @@ public class AbstractConsumerTest extends ClusterTestHarness {
       }
     }
     producer.close();
+  }
+
+
+  protected void consumeJsonMessages(String topic, long count) {
+    Properties props = new Properties();
+    props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+    props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+    props.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokerList);
+    props.setProperty(ConsumerConfig.GROUP_ID_CONFIG, "test-groupid");
+    props.setProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+    Consumer<Object, Object> consumer = new KafkaConsumer<Object, Object>(props);
+    consumer.subscribe(Arrays.asList(topic));
+    ConsumerRecords<Object, Object> consumerRecords = consumer.poll(4_000);
+    assertEquals(consumerRecords.count(),count );
+    consumer.close();
   }
 
   protected void produceRawMessages(List<ProducerRecord<Object, Object>> records) {
@@ -132,14 +154,26 @@ public class AbstractConsumerTest extends ClusterTestHarness {
   }
 
   protected Response createConsumerInstance(String groupName, String id,
-                                            String name, EmbeddedFormat format) {
+                                              String name, EmbeddedFormat format) {
+    return createConsumerInstanceV2(groupName, id, name, format, Versions.KAFKA_MOST_SPECIFIC_DEFAULT, null );
+  }
+
+  protected Response createConsumerInstanceV2(String groupName, String id,
+                                            String name, EmbeddedFormat format, String version, String autoOffsetReset) {
     ConsumerInstanceConfig config = null;
     if (id != null || name != null || format != null) {
       config = new ConsumerInstanceConfig(
           id, name, (format != null ? format.toString() : null), null, null);
     }
     return request("/consumers/" + groupName)
-        .post(Entity.entity(config, Versions.KAFKA_MOST_SPECIFIC_DEFAULT));
+        .post(Entity.entity(config, version));
+  }
+
+
+  protected Response subscribeConsumerInstanceV2(String groupName, String topic,
+                                                 String name){
+    ConsumerSubscriptionRecord subscriptionRecord = new ConsumerSubscriptionRecord(Arrays.asList(topic), "");
+    return request("/consumers/" + groupName + "/instances/"+name+"/subscription").post(Entity.entity(subscriptionRecord, Versions.KAFKA_V2_JSON));
   }
 
   protected String consumerNameFromInstanceUrl(String url) {
@@ -156,6 +190,24 @@ public class AbstractConsumerTest extends ClusterTestHarness {
   protected String startConsumeMessages(String groupName, String topic, EmbeddedFormat format,
                                         String expectedMediatype) {
     return startConsumeMessages(groupName, topic, format, expectedMediatype, false);
+  }
+
+  protected void startConsumeMessagesV2(String groupName, String topic, EmbeddedFormat format,
+                                        String expectedMediatype, String instanceName) {
+    startConsumeMessagesV2(groupName, topic, format, expectedMediatype, instanceName, false);
+  }
+
+  protected void startConsumeMessagesV2(String groupName, String topic, EmbeddedFormat format,
+                                        String expectedMediatype, String instanceName,
+                                        boolean expectFailure) {
+
+    Response createResponse = createConsumerInstanceV2(groupName, null, instanceName, format, Versions.KAFKA_V2_JSON, "smallest");
+    assertOKResponse(createResponse, Versions.KAFKA_V2_JSON);
+    assertTrue("Consumer creation response contains instance id "+instanceName, createResponse.readEntity(String.class).contains(instanceName));
+    Response subscriptionResponse = subscribeConsumerInstanceV2(groupName, topic, instanceName);
+    assertNoContentResponse(subscriptionResponse);
+    Response subscriptionsResponse = request("/consumers/"+groupName+"/instances/"+instanceName+"/subscription").accept(Versions.KAFKA_V2_JSON).get();
+    assertEquals("{\"topics\":[\""+topic+"\"]}", subscriptionsResponse.readEntity(String.class));
   }
 
   /**
@@ -261,7 +313,6 @@ public class AbstractConsumerTest extends ClusterTestHarness {
     if (count != null) {
       queryParams.put("count", count.toString());
     }
-
     Response response = request("/topics/" + topicName + "/partitions/0/messages", queryParams)
         .accept(accept).get();
     assertOKResponse(response, responseMediatype);
@@ -270,6 +321,29 @@ public class AbstractConsumerTest extends ClusterTestHarness {
 
     assertEqualsMessages(records, consumed, converter);
   }
+
+
+  protected <KafkaK, KafkaV, ClientK, ClientV, RecordType extends ConsumerRecord<ClientK, ClientV>>
+  void consumeMessagesV2(
+          String groupName, String instanceName, String topic, List<ProducerRecord<KafkaK, KafkaV>> records,
+          String accept, String responseMediatype,
+          GenericType<List<RecordType>> responseEntityType,
+          Converter converter) {
+
+    Response subscriptionsResponse = request("/consumers/"+groupName+"/instances/"+instanceName+"/subscription").accept(Versions.KAFKA_V2_JSON).get();
+    assertEquals("{\"topics\":[\""+topic+"\"]}", subscriptionsResponse.readEntity(String.class));
+
+
+    Response response = request("/consumers/"+groupName+"/instances/"+instanceName+"/records")
+             .accept(accept).get();
+
+    assertOKResponse(response, responseMediatype);
+    List<RecordType> consumed = TestUtils.tryReadEntityOrLog(response, responseEntityType);
+    assertEquals(records.size(), consumed.size());
+    assertEqualsMessages(records, consumed, converter);
+  }
+
+
 
   protected <KafkaK, KafkaV, ClientK, ClientV, RecordType extends ConsumerRecord<ClientK, ClientV>>
   void consumeMessages(

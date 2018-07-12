@@ -97,10 +97,12 @@ public class TestUtils {
       Versions.KAFKA_V1_JSON, Versions.KAFKA_DEFAULT_JSON, Versions.JSON, Versions.GENERIC_REQUEST
   };
   public static final List<String> V1_REQUEST_ENTITY_TYPES_BINARY;
-
+  public static final List<String> V1_REQUEST_ENTITY_TYPES_RAW;
   static {
     V1_REQUEST_ENTITY_TYPES_BINARY = new ArrayList<String>(Arrays.asList(V1_REQUEST_ENTITY_TYPES));
     V1_REQUEST_ENTITY_TYPES_BINARY.add(Versions.KAFKA_V1_JSON_BINARY);
+
+    V1_REQUEST_ENTITY_TYPES_RAW = new ArrayList<String>(Arrays.asList(Versions.KAFKA_V1_JSON_RAW));
   }
 
   public static final List<String> V1_REQUEST_ENTITY_TYPES_AVRO = Arrays.asList(
@@ -144,6 +146,13 @@ public class TestUtils {
   public static void assertOKResponse(Response rawResponse, String mediatype) {
     assertEquals(Response.Status.OK.getStatusCode(), rawResponse.getStatus());
     assertEquals(mediatype, rawResponse.getMediaType().toString());
+  }
+
+  /**
+   * Asserts that the response received an HTTP 204 status code.
+   */
+  public static void assertNoContentResponse(Response rawResponse) {
+    assertEquals(Response.Status.NO_CONTENT.getStatusCode(), rawResponse.getStatus());
   }
 
   /**
